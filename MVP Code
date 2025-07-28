@@ -1,0 +1,204 @@
+Folder Structure (Monorepo-style for GitHub)
+pgsql
+
+trusted-nanny-platform-mvp/
+├── backend/
+│   ├── manage.py
+│   ├── requirements.txt
+│   ├── nannycore/
+│   │   ├── models.py
+│   │   ├── views.py
+│   │   ├── urls.py
+│   │   ├── serializers.py
+│   │   ├── scoring.py
+│   │   └── tasks.py
+│   └── trustednanny/
+│       ├── settings.py
+│       └── urls.py
+├── frontend/
+│   └── react-app/
+│       ├── src/
+│       │   ├── pages/
+│       │   ├── components/
+│       │   ├── services/
+│       │   └── App.js
+│       └── package.json
+└── README.md
+🛠 Backend (Django + DRF)
+models.py (Simplified MVP Structure)
+python
+
+from django.db import models
+from django.contrib.auth.models import AbstractUser
+
+class User(AbstractUser):
+    ROLE_CHOICES = (('family', 'Family'), ('nanny', 'Nanny'), ('admin', 'Admin'))
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+    phone = models.CharField(max_length=15)
+    verified = models.BooleanField(default=False)
+
+class NannyProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    languages = models.CharField(max_length=255)
+    experience_years = models.IntegerField()
+    location = models.CharField(max_length=255)
+    has_first_aid = models.BooleanField(default=False)
+    personality_score = models.FloatField(default=0.0)
+
+class BackgroundCheck(models.Model):
+    nanny = models.ForeignKey(NannyProfile, on_delete=models.CASCADE)
+    criminal_record = models.BooleanField()
+    reference_verified = models.BooleanField()
+    id_document_url = models.URLField()
+    approved = models.BooleanField(default=False)
+
+class TrainingModule(models.Model):
+    title = models.CharField(max_length=200)
+    content = models.TextField()
+
+class CompletedTraining(models.Model):
+    nanny = models.ForeignKey(NannyProfile, on_delete=models.CASCADE)
+    module = models.ForeignKey(TrainingModule, on_delete=models.CASCADE)
+    date_completed = models.DateField(auto_now_add=True)
+
+class MatchRequest(models.Model):
+    family = models.ForeignKey(User, on_delete=models.CASCADE, related_name='family_requests')
+    preferred_languages = models.CharField(max_length=255)
+    child_age = models.IntegerField()
+    location = models.CharField(max_length=255)
+    scheduled = models.BooleanField(default=False)
+
+class DailyLog(models.Model):
+    nanny = models.ForeignKey(NannyProfile, on_delete=models.CASCADE)
+    family = models.ForeignKey(User, on_delete=models.CASCADE)
+    date = models.DateField(auto_now_add=True)
+    log_text = models.TextField()
+
+class PerformanceReview(models.Model):
+    nanny = models.ForeignKey(NannyProfile, on_delete=models.CASCADE)
+    rating = models.IntegerField()
+    feedback = models.TextField()
+    reviewer = models.ForeignKey(User, on_delete=models.CASCADE)
+views.py (Key API Endpoints)
+python
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from .models import NannyProfile, MatchRequest
+from .scoring import match_nannies
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_recommended_nannies(request):
+    user = request.user
+    match_request = MatchRequest.objects.filter(family=user).last()
+    recommendations = match_nannies(match_request)
+    return Response(recommendations)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def submit_background_check(request):
+    # mock example
+    return Response({'status': 'submitted for review'})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def nanny_dashboard(request):
+    nanny = NannyProfile.objects.get(user=request.user)
+    return Response({
+        "personality_score": nanny.personality_score,
+        "trainings": list(nanny.completedtraining_set.values())
+    })
+scoring.py (AI-based Scoring Placeholder)
+python
+
+def match_nannies(match_request):
+    from .models import NannyProfile
+    matches = NannyProfile.objects.filter(
+        location=match_request.location,
+        languages__icontains=match_request.preferred_languages
+    ).order_by('-experience_years')
+    return [{"id": n.id, "name": n.user.username, "score": n.personality_score} for n in matches]
+📱 Frontend (React)
+/pages/FamilyDashboard.js
+jsx
+
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
+
+const FamilyDashboard = () => {
+  const [nannies, setNannies] = useState([]);
+
+  useEffect(() => {
+    axios.get('/api/nannies/recommendations/', {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    }).then(res => setNannies(res.data));
+  }, []);
+
+  return (
+    <div>
+      <h2>Recommended Nannies</h2>
+      {nannies.map(n => (
+        <div key={n.id}>
+          <strong>{n.name}</strong> — Score: {n.score}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export default FamilyDashboard;
+📦 Backend requirements.txt
+txt
+
+Django>=4.2
+djangorestframework
+djangorestframework-simplejwt
+psycopg2
+📝 GitHub README.md
+md
+
+# Trusted Nanny Platform MVP
+
+## Core Modules:
+- 👩‍👧 Vetting & onboarding of nannies (with background check)
+- 🧠 Personality scoring (basic AI-based match logic)
+- 🧑‍🏫 In-app training & certification tracking
+- 📲 Smart nanny-family matching
+- 📍 Real-time logging, GPS check-in/out, secure chat (via APIs)
+
+## Setup
+
+1. Backend
+```bash
+cd backend
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
+Frontend
+
+bash
+
+cd frontend/react-app
+npm install
+npm start
+Roadmap
+AI-powered vetting automation
+
+Mobile App with push notifications
+
+Stripe & M-PESA integration
+
+SMS notifications
+
+yaml
+
+---
+
+## 🚀 Optional Add-Ons
+- Mobile app (React Native)
+- Live GPS + socket-based nanny check-in
+- End-to-end encryption for chat
+- Stripe/M-Pesa salary payout integration
